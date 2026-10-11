@@ -9,7 +9,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 
 from .config import DEFAULT_CONFIG
-from .experiments import clock_to_seconds, run_baseline_experiment
+from .experiments import clock_to_seconds, run_baseline_experiment, seconds_to_clock
 
 
 class SimulationDashboard:
@@ -26,6 +26,11 @@ class SimulationDashboard:
         self.arrival_count = tk.StringVar(value=str(DEFAULT_CONFIG["arrivals"]))
         self.arrival_start = tk.StringVar(value=DEFAULT_CONFIG["arrival_start_time"])
         self.arrival_end = tk.StringVar(value=DEFAULT_CONFIG["arrival_end_time"])
+        self.pathway_mix = tk.StringVar(
+            value=", ".join(str(int(weight * 100)) for weight in DEFAULT_CONFIG["pathway_weights"])
+        )
+        self.priority_pathway = tk.StringVar(value="7")
+        self.priority_share = tk.StringVar(value="40")
         self.seed = tk.StringVar(value="42")
         self.speed = tk.DoubleVar(value=1.0)
         self.status = tk.StringVar(value="Ready")
@@ -73,6 +78,34 @@ class SimulationDashboard:
             controls,
             text="Workers are round dots; arrivals are distributed between the selected clock times.",
         ).grid(row=1, column=0, columnspan=15, pady=(8, 0), sticky=tk.W)
+        ttk.Label(controls, text="Pathway mix (%)").grid(
+            row=2, column=0, padx=(0, 6), pady=(8, 0), sticky=tk.W
+        )
+        ttk.Entry(controls, textvariable=self.pathway_mix, width=70).grid(
+            row=2, column=1, columnspan=14, pady=(8, 0), sticky=tk.W
+        )
+        ttk.Label(
+            controls,
+            text="Enter 10 percentages in pathway order; they must total 100.",
+        ).grid(row=3, column=1, columnspan=14, pady=(3, 0), sticky=tk.W)
+        ttk.Label(controls, text="Priority pathway").grid(
+            row=4, column=0, padx=(0, 6), pady=(8, 0), sticky=tk.W
+        )
+        ttk.Entry(controls, textvariable=self.priority_pathway, width=6).grid(
+            row=4, column=1, pady=(8, 0), sticky=tk.W
+        )
+        ttk.Label(controls, text="gets").grid(row=4, column=2, padx=6, pady=(8, 0))
+        ttk.Entry(controls, textvariable=self.priority_share, width=8).grid(
+            row=4, column=3, pady=(8, 0), sticky=tk.W
+        )
+        ttk.Label(controls, text="% of arrivals").grid(
+            row=4, column=4, padx=(6, 12), pady=(8, 0)
+        )
+        ttk.Button(
+            controls,
+            text="Apply priority mix",
+            command=self.apply_priority_mix,
+        ).grid(row=4, column=5, columnspan=3, pady=(8, 0), sticky=tk.W)
 
     def _build_results(self):
         self.figure = Figure(figsize=(12, 8), dpi=100)
@@ -91,9 +124,17 @@ class SimulationDashboard:
             seed = int(self.seed.get())
             start_seconds = clock_to_seconds(self.arrival_start.get())
             end_seconds = clock_to_seconds(self.arrival_end.get())
+            pathway_weights = [
+                float(value.strip()) / 100
+                for value in self.pathway_mix.get().split(",")
+            ]
             if worker_count < 1 or arrival_count < 1:
                 raise ValueError
             if end_seconds <= start_seconds:
+                raise ValueError
+            if len(pathway_weights) != 10 or any(weight < 0 for weight in pathway_weights):
+                raise ValueError
+            if abs(sum(pathway_weights) - 1.0) > 0.001:
                 raise ValueError
         except ValueError:
             messagebox.showerror(
@@ -112,6 +153,7 @@ class SimulationDashboard:
                 "arrivals": arrival_count,
                 "arrival_start_time": self.arrival_start.get(),
                 "arrival_end_time": self.arrival_end.get(),
+                "pathway_weights": pathway_weights,
             },
         )
         self.events = result["worker_events"]
@@ -163,6 +205,24 @@ class SimulationDashboard:
         self.figure.tight_layout(pad=3)
         self._start_animation()
 
+    def apply_priority_mix(self):
+        try:
+            pathway = int(self.priority_pathway.get())
+            share = float(self.priority_share.get())
+            if not 1 <= pathway <= 10 or not 0 <= share <= 100:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror(
+                "Invalid priority mix",
+                "Pathway must be 1-10 and its percentage must be between 0 and 100.",
+            )
+            return
+
+        remaining_share = (100 - share) / 9
+        percentages = [remaining_share] * 10
+        percentages[pathway - 1] = share
+        self.pathway_mix.set(", ".join(f"{percentage:.2f}" for percentage in percentages))
+
     def _start_animation(self):
         self.animation = FuncAnimation(
             self.figure,
@@ -211,11 +271,10 @@ class SimulationDashboard:
                 linewidths=0.4,
                 zorder=5,
             )
-        clock_minutes = self.arrival_start_seconds / 60 + simulation_time / 60
-        hour = int(clock_minutes // 60) % 24
-        minute = int(clock_minutes % 60)
+        clock_time = seconds_to_clock(self.arrival_start_seconds + simulation_time)
+        boarded = sum(event["boarding_time"] <= simulation_time for event in self.events)
         self.status.set(
-            f"Clock {hour:02d}:{minute:02d} | visible workers: {len(offsets)}"
+            f"Boarding time {clock_time} | entered factory: {boarded}/{len(self.events)}"
         )
         return self.animation_axis.collections
 

@@ -18,6 +18,14 @@ def clock_to_seconds(value):
     ).total_seconds()
 
 
+def seconds_to_clock(value):
+    """Convert seconds after midnight into an HH:MM:SS clock value."""
+    total_seconds = int(round(value)) % (24 * 60 * 60)
+    hours, remainder = divmod(total_seconds, 60 * 60)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
 def run_baseline_experiment(seed=None, animate=False, config=None):
     """Simulate morning arrivals through pathway authentication and spin gates."""
     del animate
@@ -67,11 +75,18 @@ def run_baseline_experiment(seed=None, animate=False, config=None):
                 "pathway": pathway,
                 "auth_method": auth_method,
                 "arrival_time": arrival_time,
+                "arrival_clock_time": seconds_to_clock(
+                    arrival_start_seconds + arrival_time
+                ),
                 "auth_start": auth_start,
                 "auth_end": auth_end,
                 "gate_start": gate_start,
                 "gate_end": gate_end,
                 "exit_time": gate_end,
+                "boarding_time": gate_end,
+                "boarding_clock_time": seconds_to_clock(
+                    arrival_start_seconds + gate_end
+                ),
                 "wait_time": auth_start - arrival_time,
                 "auth_time": auth_time,
                 "gate_time": gate_time,
