@@ -17,6 +17,7 @@ class SimulationDashboard:
         self.root = root
         self.root.title("Factory Morning Entry Simulation")
         self.root.geometry("1220x850")
+        self._configure_dark_theme()
         self.root.minsize(980, 700)
         self.animation = None
         self.events = []
@@ -33,6 +34,56 @@ class SimulationDashboard:
         self._build_controls()
         self._build_results()
         self.run_simulation()
+
+    def _configure_dark_theme(self):
+        self.colors = {
+            "background": "#171a21",
+            "panel": "#202631",
+            "text": "#e8edf2",
+            "muted": "#aab4c0",
+            "grid": "#4a5565",
+            "queue": "#f0b64f",
+            "scan": "#ef7067",
+            "gate": "#65a9d6",
+            "factory": "#70bd82",
+        }
+        self.root.configure(background=self.colors["background"])
+        style = ttk.Style(self.root)
+        style.theme_use("clam")
+        style.configure("TFrame", background=self.colors["background"])
+        style.configure(
+            "TLabelframe",
+            background=self.colors["background"],
+            foreground=self.colors["text"],
+        )
+        style.configure(
+            "TLabelframe.Label",
+            background=self.colors["background"],
+            foreground=self.colors["text"],
+        )
+        style.configure(
+            "TLabel",
+            background=self.colors["background"],
+            foreground=self.colors["text"],
+        )
+        style.configure(
+            "TButton",
+            background=self.colors["panel"],
+            foreground=self.colors["text"],
+            bordercolor=self.colors["grid"],
+        )
+        style.map("TButton", background=[("active", "#303b4c")])
+        style.configure(
+            "TEntry",
+            fieldbackground=self.colors["panel"],
+            foreground=self.colors["text"],
+            insertcolor=self.colors["text"],
+        )
+        style.configure(
+            "Horizontal.TScale",
+            background=self.colors["background"],
+            troughcolor=self.colors["panel"],
+        )
 
     def _build_controls(self):
         controls = ttk.LabelFrame(self.root, text="Morning rush settings", padding=10)
@@ -75,11 +126,18 @@ class SimulationDashboard:
         ).grid(row=1, column=0, columnspan=15, pady=(8, 0), sticky=tk.W)
 
     def _build_results(self):
-        self.figure = Figure(figsize=(12, 8), dpi=100)
+        self.figure = Figure(
+            figsize=(12, 8), dpi=100, facecolor=self.colors["background"]
+        )
         layout = self.figure.add_gridspec(2, 2, height_ratios=(1.5, 1))
         self.animation_axis = self.figure.add_subplot(layout[0, :])
         self.wait_axis = self.figure.add_subplot(layout[1, 0])
         self.jobs_axis = self.figure.add_subplot(layout[1, 1])
+        for axis in (self.animation_axis, self.wait_axis, self.jobs_axis):
+            axis.set_facecolor(self.colors["panel"])
+            axis.tick_params(colors=self.colors["muted"])
+            axis.xaxis.label.set_color(self.colors["muted"])
+            axis.yaxis.label.set_color(self.colors["muted"])
         self.figure.tight_layout(pad=3)
         self.chart = FigureCanvasTkAgg(self.figure, master=self.root)
         self.chart.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=12, pady=(6, 12))
@@ -121,18 +179,20 @@ class SimulationDashboard:
 
         pathways = metrics["pathway"].tolist()
         self.wait_axis.clear()
-        self.wait_axis.bar(pathways, metrics["average_wait_time"], color="#d95f59")
+        self.wait_axis.bar(
+            pathways, metrics["average_wait_time"], color=self.colors["scan"]
+        )
         self.wait_axis.set_title("Average queue wait by pathway")
         self.wait_axis.set_xlabel("Pathway")
         self.wait_axis.set_ylabel("Seconds")
-        self.wait_axis.grid(axis="y", alpha=0.25)
+        self.wait_axis.grid(axis="y", color=self.colors["grid"], alpha=0.45)
 
         self.jobs_axis.clear()
-        self.jobs_axis.bar(pathways, metrics["jobs"], color="#3478a4")
+        self.jobs_axis.bar(pathways, metrics["jobs"], color=self.colors["gate"])
         self.jobs_axis.set_title("Arrivals using each pathway")
         self.jobs_axis.set_xlabel("Pathway")
         self.jobs_axis.set_ylabel("Workers")
-        self.jobs_axis.grid(axis="y", alpha=0.25)
+        self.jobs_axis.grid(axis="y", color=self.colors["grid"], alpha=0.45)
 
         self.animation_axis.clear()
         self.animation_axis.set_xlim(-1.0, 1.15)
@@ -145,11 +205,21 @@ class SimulationDashboard:
         )
         self.animation_axis.set_xlabel("Worker movement from left to right")
         self.animation_axis.set_title("Morning entry: 10 pathways, one scanner and one spin gate per pathway")
-        self.animation_axis.grid(axis="y", alpha=0.2)
-        self.animation_axis.axvspan(-0.95, -0.05, color="#f4c95d", alpha=0.12)
-        self.animation_axis.axvspan(-0.05, 0.3, color="#d95f59", alpha=0.12)
-        self.animation_axis.axvspan(0.3, 0.75, color="#3478a4", alpha=0.12)
-        self.animation_axis.axvspan(0.75, 1.15, color="#5aa469", alpha=0.12)
+        self.animation_axis.grid(axis="y", color=self.colors["grid"], alpha=0.45)
+        self.animation_axis.axvspan(-0.95, -0.05, color=self.colors["queue"], alpha=0.12)
+        self.animation_axis.axvspan(-0.05, 0.3, color=self.colors["scan"], alpha=0.12)
+        self.animation_axis.axvspan(0.3, 0.75, color=self.colors["gate"], alpha=0.12)
+        self.animation_axis.axvspan(0.75, 1.15, color=self.colors["factory"], alpha=0.12)
+        self.animation_axis.legend(
+            handles=[
+                Patch(color=self.colors["queue"], label="Waiting"),
+                Patch(color=self.colors["scan"], label="Scanning"),
+                Patch(color=self.colors["gate"], label="Gate opening"),
+            ],
+            loc="upper right",
+            ncol=3,
+            frameon=False,
+        )
         self.animation_axis.legend(
             handles=[
                 Patch(color="#f0a202", label="Waiting"),
@@ -190,13 +260,13 @@ class SimulationDashboard:
                     for other in self.events
                 )
                 x_position = max(-0.9, -0.12 - queue_rank * 0.055)
-                colors.append("#f0a202")
+                colors.append(self.colors["queue"])
             elif simulation_time < event["auth_end"]:
                 x_position = 0.12
-                colors.append("#d95f59")
+                colors.append(self.colors["scan"])
             else:
                 x_position = 0.52
-                colors.append("#3478a4")
+                colors.append(self.colors["gate"])
             offsets.append((x_position, lane))
 
         for collection in list(self.animation_axis.collections):
